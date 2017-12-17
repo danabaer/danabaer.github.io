@@ -1,0 +1,664 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+   
+    <meta charset="UTF-8">
+    <title> AGG | Geography Departments </title>
+    <style>
+       
+
+		*{
+		font-family: cambria
+		}
+      
+		body {
+         background:transparent url(images/bg_main_top.gif) no-repeat 50% 0; font:normal 11px cambria,sans-serif; /*color:#4E4E4E;*/color: #333; margin:0px; padding:0; height:100%; 
+		 background-image url("images.jpg");
+        }
+
+        img {
+          border:none; display:block;
+        }
+
+        header {
+
+            color:#4B8A4E; font:normal 33px cambria,sans-serif; margin:3px 0 9px 0; padding:0; line-height:normal;
+
+        }
+		
+		h2 {
+			margin-top: 30px!important;
+		}
+		a {color:#4B8A4E; text-decoration:none;}
+		a:hover {color:#4B8A4E; text-decoration:underline;}
+		a.get-help {background:url(images/utility_arrow.gif) no-repeat 0 3px; padding-left:13px; font:bold 11px arial,sans-serif; color:#8B9899; margin:0 0 0 10px;}
+		a.read-more {background:url(images/green_arrow.gif) no-repeat 0 3px; padding-left:13px; font:bold 11px arial,sans-serif; color:#4B8A4E;}
+		a.read-more:hover {font:bold 12px cambria,sans-serif; color:#4B8A4E; text-decoration:underline !important;}
+		
+		ul {list-style-type:none; margin:6px 0 0 0; padding:0;}
+		ul li {background:url(images/bullet.gif) no-repeat 0 6px; padding-left:7px; margin-bottom:2px; font-family: Cambria;}
+
+		footer, nav {
+            padding: 1em;
+            color: grey;
+            background-color: white;
+            /*text-align: center;*/
+            font-size: 120%;
+			font-family: Cambria;
+            }
+		
+        li {
+            font-family: Cambria;
+			display: inline;
+            margin-right: 20px;
+		}
+  
+		.top-nav {width:985px; height:52px; overflow:hidden; clear:both;}
+		.top-nav img {float:left;}
+		
+		#viewDiv {
+			font-family: Cambria;
+			padding: 0;
+            margin: 0;
+        }
+
+		#googft-mapCanvas {
+			margin: 0;
+			padding: 0;
+			width: 100%;
+		}
+
+
+    </style>
+
+<link rel="stylesheet" href="https://js.arcgis.com/4.1/esri/css/main.css">
+<link rel="stylesheet" href="http://ajax.googleapis.com/ajax/libs/dojo/1.10.4/dojo/resources/dojo.css">  
+<script type="text/javascript" src="https://maps.google.com/maps/api/js?v=3"></script>
+
+<script src="https://js.arcgis.com/4.1/"></script>
+
+<script>
+	require([
+		"esri/Map",
+		"esri/views/MapView",
+		"esri/layers/FeatureLayer",
+		"esri/widgets/Search",
+		"esri/layers/GraphicsLayer",
+		"esri/geometry/geometryEngine",
+		"esri/geometry/SpatialReference",
+		"esri/geometry/Point",
+		"esri/geometry/Polygon",
+		"esri/Graphic",
+		"esri/Color",
+		"esri/PopupTemplate",
+		"esri/symbols/SimpleFillSymbol",
+		"esri/symbols/SimpleMarkerSymbol",
+		"esri/symbols/SimpleLineSymbol",
+		"esri/renderers/SimpleRenderer",
+		"dojo/on",
+		"dojo/dom",
+		"dojo/dom-construct",
+		"dojo/_base/declare",     
+		"dgrid/Grid", 
+		"dgrid/Keyboard",     
+		"dgrid/Selection",
+		"dojo/domReady!"],
+			
+			function(Map, MapView, FeatureLayer, Search, GraphicsLayer, geometryEngine, SpatialReference, Point, Polygon, Graphic, Color, PopupTemplate, SimpleFillSymbol, SimpleMarkerSymbol, SimpleLineSymbol, SimpleRenderer, on, dom, domConstruct, declare, Grid, Keyboard, Selection) {
+			var programUrl = "https://129.2.6.223:6443/arcgis/rest/services/FINAL_PROJECT_TA/MapServer/0"
+			var programLayer = new FeatureLayer ({
+				url: programUrl,
+				
+				outFields: ["*"],
+				visible: true
+			});	
+			
+			var baseUrl = "https://129.2.6.223:6443/arcgis/rest/services/FINAL_PROJECT_TA/MapServer/1"
+			var baseLayer = new FeatureLayer ({
+				url: baseUrl,
+				outFields: ["*"],
+				visible: true
+			});
+			
+			var resultsLayer = new GraphicsLayer();
+			
+			var map = new Map ({
+				basemap: "dark-gray-vector",
+				layers: [baseLayer, programLayer, resultsLayer]
+				
+			});
+			
+			
+			var view = new MapView ({
+				container: "viewDiv",
+				map: map,
+				zoom: 3,
+				center: [-95.5795, 39.8283]
+				
+			});
+			
+			var searchWidget = new Search ({
+				view: view
+			});
+			searchWidget.startup();
+			
+			view.ui.add(searchWidget, {
+				position: "top-left",
+				index: 0
+			});
+			
+			var polySym = new SimpleFillSymbol({
+				color: [255, 255, 255, 0.5],
+				outline: {
+					color: [0, 0, 0, 0.5],
+					width: 150
+				}
+			});
+			
+			var bufferLayer = new GraphicsLayer ({
+				renderer: new SimpleRenderer({
+					symbol:polySym
+				})
+			});
+			
+			map.addMany([bufferLayer]);
+			
+			var fillSymbol = new SimpleFillSymbol ({
+				color: [227, 139, 79, 0.8],
+				outline: {
+					color: [255, 255, 255],
+					width: 3
+				}
+			});
+			
+			var schoolBuffer;
+			var schoolPolygonArray = new Array();
+			var schoolPolygon;
+						
+			on(dom.byId("query"), "click", function(){
+				querySchools().then(displayResults);
+			});
+
+			on(dom.byId("queryP"), "click", function(){
+				search();
+			});	
+			
+			setSchoolDistrictLayerPopupTemplate();						
+			
+			
+	
+			function querySchools() {
+				var query = programLayer.createQuery();
+				var state_ele = document.getElementById("State");
+				var state = state_ele.options[state_ele.selectedIndex].value;
+				var department_ele = document.getElementById("department");
+				var department = department_ele.options[department_ele.selectedIndex].value;
+				if (state == "All"){
+					
+					switch (parseFloat(department)) {
+					case 0:
+						query.where = "code_count = 0";
+						break;
+					case 1:
+						query.where = "code_count > 0";
+						break;
+					}
+
+				}
+				else{
+				if (department == "All"){
+					query.where = "State = \'" + state + "\'";
+				}
+				switch (parseFloat(department)) {
+					case 0:
+						query.where = "State = \'" + state + "\'and code_count = 0";
+						break;
+					case 1:
+						query.where = "State = \'" + state + "\' and code_count > 0";
+						break;
+					}
+				}
+				
+				resultsLayer.removeAll();
+				return programLayer.queryFeatures(query);	
+			}
+			
+			function queryCourses(check, popu) {
+				var queryP = programLayer.createQuery();
+				switch (check) {
+					case "none":
+						queryP.where = "prog_relat = 0";
+						break;
+					case "equal":
+						queryP.where = "prog_relat = " + popu;
+						break;
+					case "less":
+						queryP.where = "prog_relat < " + popu;
+						break;
+					case "lessequal":
+						queryP.where = "prog_relat <= " + popu;
+						break;
+					case "greater":
+						queryP.where = "prog_relat > " + popu;
+						break;
+					case "greaterequal":
+						queryP.where = "prog_relat >= " + popu;
+						break;			
+				}
+				return programLayer.queryFeatures(queryP);
+			}
+			
+			function queryRow(school) {
+				var query = middleschoolLayer.createQuery();
+				query.where = "name=\'"+school+"\'";
+				return middleschoolLayer.queryFeatures(query);	
+			}
+			
+			function querySchoolsBuffer(event) {
+				var centerPt = event.mapPoint;
+				schoolBuffer = geometryEngine.geodesicBuffer(centerPt, 2, "miles", true);
+				bufferLayer.add(new Graphic({geometry: schoolBuffer}));
+				var query = programLayer.createQuery();
+				query.geometry = schoolBuffer;
+				query.spatialRelationship = "intersects";
+				return programLayer.queryFeatures(query);
+			}
+			
+			function querySchoolsPolygon(event) {
+				var query = programLayer.createQuery();
+				query.geometry = schoolPolygon;
+				query.spatialRelationship = "intersects";
+				return programLayer.queryFeatures(query);
+			}
+									
+			function displayResults(results){
+				
+				var features = results.features.map(function(graphic){
+					graphic.symbol = new SimpleMarkerSymbol ({
+						style: "diamond",
+						size: 12,
+						color: "yellow"
+					});
+				return graphic;
+				});
+				var numSchools = features.length;
+				
+				var featureAttributes = new Array();
+				
+				var values = features.map(function(feature) {
+					featureAttributes.push(feature.attributes);
+					return feature.attributes.Name;
+				});
+				
+				dom.byId("result").innerHTML = numSchools + " schools found "+values;
+				resultsLayer.addMany(features);	
+			}		
+			
+
+
+				function displayResults1(results){
+				
+				var features = results.features.map(function(graphic){
+					graphic.symbol = new SimpleMarkerSymbol ({
+						style: "diamond",
+						size: 12,
+						color: "green"
+					});
+				return graphic;
+				});
+				var numSchools = features.length;
+				
+				var featureAttributes = new Array();
+				
+				var values = features.map(function(feature) {
+					featureAttributes.push(feature.attributes);
+					return feature.attributes.Name;
+				});
+				
+				dom.byId("result").innerHTML = numSchools + " schools found "+values;
+				resultsLayer.addMany(features);	
+			}	
+
+			function displayResultsBuffer(results){
+				resultsLayer.removeAll();
+				var features = results.features.map(function(graphic){
+					graphic.symbol = new SimpleMarkerSymbol ({
+						style: "solid",
+						color: "black"
+					});
+				return graphic;
+				});
+				resultsLayer.addMany(features);	
+			}
+		
+			function search() {
+				var pop_ele = document.getElementsByName('pop');
+				var pop;
+				for(var i = 0; i < pop_ele.length; i++){
+					if(pop_ele[i].checked){
+						pop = pop_ele[i].value;
+						break;
+					}
+				}
+					
+				var courses_ele = document.getElementById("courses");
+				var courses = courses_ele.value;
+				if (!isInt(courses)) {
+					alert("The courses must be an integer");
+					return;
+				}
+				courses = parseFloat(courses);
+				
+				queryCourses(pop,courses).then(displayResults1);
+				
+			}
+			
+			function isInt(value) {
+				if (isNaN(value)) {
+					return false;
+				}
+				var x = parseFloat(value);
+				return (x | 0) === x;
+			}
+
+			function setSchoolDistrictLayerPopupTemplate() {
+				var template = new PopupTemplate({
+					title: "<font color='#008000'>Geography Departments",
+					content: [
+						{
+							type: "fields",
+							fieldInfos: [
+
+								{fieldName: "Full_Name",
+								visible: true,
+								label: "School"},
+								{fieldName: "Department",
+								visible: true,
+								label: "Department"},
+                                {fieldName: "Address",
+								visible: true,
+								label: "Address"},
+								{fieldName: "City",
+								visible: true,
+								label: "City"},
+								{fieldName: "geog_URL",
+								visible: true,
+								label: "Department Homepage"},
+								{fieldName: "deg_offrd",
+								visible: true,
+								label: "Degrees Offered"},
+								{fieldName: "Course_URL",
+								visible: true,
+								label: "Course Listing Homepage"},
+								{fieldName: "prog_relat",
+								visible: true,
+								label: "Programming Courses Offered"},
+								{fieldName: "code_count",
+								visible: true,
+								label: "Programming Course Offered in Geography Department"}
+								]
+						},
+						{
+							type: "text",
+							text: ""
+						},
+					]
+				});
+				
+				programLayer.popupTemplate = template;
+			}
+					
+			function hideSchoolDistrictLayerPopupTemplate() {
+				programLayer.popupTemplate = "";
+			}
+				
+		});	
+		
+		function initialize() {
+    var isMobile = (navigator.userAgent.toLowerCase().indexOf('android') > -1) ||
+      (navigator.userAgent.match(/(iPod|iPhone|iPad|BlackBerry|Windows Phone|iemobile)/));
+    if (isMobile) {
+      var viewport = document.querySelector("meta[name=viewport]");
+      viewport.setAttribute('content', 'initial-scale=1.0, user-scalable=no');
+    }
+    var mapDiv = document.getElementById('googft-mapCanvas');
+    
+    var map = new google.maps.Map(mapDiv, {
+      center: new google.maps.LatLng(39.8283,-95.5795),
+      zoom: 4,
+      mapTypeId: google.maps.MapTypeId.HYBRID
+    });
+    map.controls[google.maps.ControlPosition.RIGHT_BOTTOM].push(document.getElementById('googft-legend-open'));
+    map.controls[google.maps.ControlPosition.RIGHT_BOTTOM].push(document.getElementById('googft-legend'));
+
+    layer = new google.maps.FusionTablesLayer({
+      map: map,
+      heatmap: { enabled: false },
+      query: {
+        select: "col8",
+        from: "1VOc8Bc3YOWwlrRY2wjKxxPWvAHmWxHNODdsCanIr",
+        where: ""
+      },
+      options: {
+        styleId: 2,
+        templateId: 2
+      }
+    });
+
+    if (isMobile) {
+      var legend = document.getElementById('googft-legend');
+      var legendOpenButton = document.getElementById('googft-legend-open');
+      var legendCloseButton = document.getElementById('googft-legend-close');
+      legend.style.display = 'none';
+      legendOpenButton.style.display = 'block';
+      legendCloseButton.style.display = 'block';
+      legendOpenButton.onclick = function() {
+        legend.style.display = 'block';
+        legendOpenButton.style.display = 'none';
+      }
+      legendCloseButton.onclick = function() {
+        legend.style.display = 'none';
+        legendOpenButton.style.display = 'block';
+      }
+    }
+  }
+
+  google.maps.event.addDomListener(window, 'load', initialize);
+</script>
+</head>
+
+
+<body>
+    <header>
+        <img src ="logo_aag.gif" align = "left">
+         <h2> Geography Departments Emphasis on Coding</h2>
+    </header>
+        
+    <nav>
+        <li><a href="Overview.html" target="_blank"><strong>Overview</strong></a></li>
+        <li><a href="http://www.aag.org/cs/about_aag" target="_blank"><strong>About AAG</strong></a></li>
+        <li><a href="http://www.aag.org/" target="_blank"><strong>American Association of Geographers</strong></a></li>
+        <li><a href="http://www.aag.org/cs/contact_us" target="_blank"><strong>Contact Us</strong></a></li>
+    </nav>
+ 
+<section>
+        <table width="100%" border="1" cellpadding="10">
+            <tr>
+                <td valign="top" width="20%">
+                    <table width="100%" border="0" cellpadding="5">
+                        <tr>
+                            <td>State:</td>
+                            <td>
+                                <select id="State" title="Select State">
+                                    <option value="All" selected="selected">ALL</option>
+                                    <option value="Alabama">Alabama</option>
+
+									<option value="Alaska">Alaska</option>
+									<option value="Arizona">Arizona</option>
+									<option value="Arkansas">Arkansas</option>
+									<option value="California">California</option>
+									<option value="Colorado">Colorado</option>
+									<option value="Connecticut">Connecticut</option>
+
+									<option value="Delaware">Delaware</option>
+									<option value="District of Columbia">District of Columbia</option>
+									<option value="Florida">Florida</option>
+									<option value="Georgia">Georgia</option>
+									<option value="Hawaii">Hawaii</option>
+									<option value="Idaho">Idaho</option>
+									<option value="Illinois">Illinois</option>
+
+									<option value="Indiana">Indiana</option>
+									<option value="Iowa">Iowa</option>
+									<option value="Kansas">Kansas</option>
+									<option value="Kentucky">Kentucky</option>
+									<option value="Louisiana">Louisiana</option>
+									<option value="Maine">Maine</option>
+
+									<option value="Maryland">Maryland</option>
+									<option value="Massachusetts">Massachusetts</option>
+									<option value="Michigan">Michigan</option>
+									<option value="Minnesota">Minnesota</option>
+									<option value="Mississippi">Mississippi</option>
+									<option value="Missouri">Missouri</option>
+
+									<option value="Montana">Montana</option>
+									<option value="Nebraska">Nebraska</option>
+									<option value="Nevada">Nevada</option>
+									<option value="New Hampshire">New Hampshire</option>
+									<option value="New Jersey">New Jersey</option>
+									<option value="New Mexico">New Mexico</option>
+
+									<option value="New York">New York</option>
+									<option value="North Carolina">North Carolina</option>
+									<option value="North Dakota">North Dakota</option>
+									<option value="Ohio">Ohio</option>
+									<option value="Oklahoma">Oklahoma</option>
+									<option value="Oregon">Oregon</option>
+
+									<option value="Pennsylvania">Pennsylvania</option>
+									<option value="Rhode Island">Rhode Island</option>
+									<option value="South Carolina">South Carolina</option>
+									<option value="South Dakota">South Dakota</option>
+									<option value="Tennessee">Tennessee</option>
+									<option value="Texas">Texas</option>
+
+									<option value="Utah">Utah</option>
+									<option value="Vermont">Vermont</option>
+									<option value="Virginia">Virginia</option>
+									<option value="Washington">Washington</option>
+									<option value="West Virginia">West Virginia</option>
+									<option value="Wisconsin">Wisconsin</option>
+
+									<option value="Wyoming">Wyoming</option>
+                                </select>
+                        	</td>
+                   		</tr>
+          				<tr>
+        					<td colspan="2"><hr></td>
+          				</tr> 
+          				<tr>
+          					<td>Department:</td>
+                            <td>
+                                <select id="department" title="select a department">
+                                    <option value="All" selected="selected">ALL</option>
+                                    <option value=1>Geography</option>
+                                    <option value=0>Computer Science</option>
+                                </select>
+                            </td>
+							
+          				</tr>
+						<tr>
+          					<td colspan="2" align="center">
+            					<input type="button" id="query" value="Search">
+            				</td>
+          				</tr>
+                        <tr>
+                            <td colspan="2"><hr></td>
+                        </tr>
+                        <tr>
+                           <td>Number of Courses:</td>
+                            <td>
+                                <input type="radio" name="pop" value="none" checked />none<br />
+                                <input type="radio" name="pop" value="equal" />=<br />
+                                <input type="radio" name="pop" value="less" /><<br />
+                                <input type="radio" name="pop" value="lessthneql" /><=<br />
+                                <input type="radio" name="pop" value="greater" />><br />
+                                <input type="radio" name="pop" value="grtrequal" />>=<br />
+                                <input type="text" id="courses" title="type a number">
+                            </td>
+          				</tr>
+          				<tr>
+          					<td colspan="2" align="center">
+            					<input type="button" id="queryP" value="Search Courses">
+            				</td>
+          				</tr>
+          				<tr>
+          					<td colspan="2"><hr></td>
+          				</tr>
+      				</table>
+    			</td>
+				<div class="mainStyle" id="results" >
+							<input type="radio" name="operation" id="buffOpt" checked>Map Click
+							<input type="radio" name="operation" id="drawOpt">Draw Polygon
+							<input type="radio" name="operation" id="navOpt">Navigate Map
+				</div>
+    			<td width="80%">
+					
+					<div style="height: 450px; broder: solid 1px; border-color:#0000FF;" id="viewDiv">
+			
+				    </div>
+
+					<div style="height: 450px; broder: solid 1px; border-color:#0000FF;" id="googft-mapCanvas">
+					</div>
+
+					</td>
+ 			</tr>
+ 			<tr>
+ 				<td colspan="2">
+    				<div id="result" style="display:inline">Results Here</div>
+    			</td>
+ 			</tr>
+		</table>
+		
+	<div id="grid"></div>
+	
+	</section>
+    <footer><center><p>&copy; Dana Baer & Tolu Ajayi, dbaer@umd.edu & tajayi1@umd.edu, UMD GEOG498K Fall 2017 Web GIS. </p></center></footer>
+<h3 style="text-align: center; font-size: 150% "><span style="color: rgb(192, 192, 192);">CONNECT WITH US!</span></h3>
+<center>
+<table style="width:173; height:39; cellpadding:0; cellspacing:10; ">
+    <tbody>
+        <tr>
+            <td><a href="https://twitter.com/theaag" target="_blank"> 							<img src="Twitter-icon.jpg" width="35" height="38" alt="Twitter AAG" /></a></td>
+            <td><a href="https://www.facebook.com/geographers" target="_blank"> 				<img src="facebook.jpg" width="32" height="30" alt="Facebook AAG" /></a></td>
+            <td><a href="https://www.linkedin.com/groups/53689" target="_blank"> 				<img src="linkedin.jpg" width="32" height="30" alt="AAG LinkedIn" /></a></td>
+            <td><a href="https://www.youtube.com/user/GeographyAAG" target="_blank"> 			<img src="youtube.jpg" width="32" height="" alt="AAG Instagram" /></a></td>
+            <td><a href="https://www.instagram.com/theaag/" target="_blank"> 					<img src="instagram.jpg" width="32" height="" alt="AAG Instagram" /></a></td>
+        </tr>
+    </tbody>
+</table>
+</center></div>
+	
+<img src="/site/images/footer_divider.gif" alt="" class="footer-divider" />
+	<div class="footer">
+		<div class="contact">
+			&nbsp;&nbsp;&nbsp;&nbsp;1710 16th Street, NW, Washington, DC 20009-3198<br />
+			&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Voice: 202.234.1450  &nbsp;Fax: 202.234.2744  &nbsp;E-Mail: <a href="mailto:gaia@aag.org">gaia@aag.org</a>
+            
+		</div>
+        
+		<div align="right",class="links">
+			&nbsp;&nbsp;&nbsp;&nbsp;<a href="http://www.aag.org/cs/sitemap">Site Map</a>
+			<a href="http://www.aag.org/cs/web_policies/privacy_policy">Privacy Policy</a>
+			<a href="http://www.aag.org/cs/web_policies/terms_of_use">Terms of Use</a>
+			<a href="http://www.aag.org/cs/contact_us">Contact Us</a>
+            <a href="http://www.aag.org/feeds/news_releases.rss">RSS</a><br /><br />
+	    </div>
+     </div>
+</div>
+		
+</body>
+</html>
+
+
